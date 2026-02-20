@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitorizador de Horas de Trabalho</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+    .scroll-container::-webkit-scrollbar { width: 8px; }
+    .scroll-container::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 4px; }
+  </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+<div class="bg-white shadow-2xl rounded-2xl p-6 md:p-10 w-full max-w-6xl border border-gray-200">
+
+  <!-- Título -->
+  <div class="text-center mb-8">
+    <h1 class="text-3xl md:text-4xl font-extrabold text-gray-900">Monitorizador de Horas de Trabalho</h1>
+    <p class="text-gray-500 mt-2">Registe as suas horas para gerir o saldo diário e mensal.</p>
+  </div>
+
+  <!-- Balanço Mensal -->
+  <div class="bg-emerald-50 p-6 rounded-2xl border border-emerald-200 mb-8 flex flex-col items-center justify-between md:flex-row shadow-lg">
+    <div class="mb-4 md:mb-0">
+      <h2 class="text-2xl font-bold text-emerald-800">Balanço Mensal</h2>
+      <p id="monthly-balance" class="text-3xl font-extrabold text-emerald-600 mt-2">0h 0m</p>
+    </div>
+    <div class="flex flex-col md:flex-row gap-2">
+      <button id="sync-button" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-full hover:bg-blue-700 transition-colors duration-200 shadow-md">
+        Sincronizar (Cloud)
+      </button>
+      <button id="export-button" class="bg-emerald-600 text-white font-bold py-2 px-6 rounded-full hover:bg-emerald-700 transition-colors duration-200 shadow-md">
+        Exportar CSV
+      </button>
+      <button id="reset-button" class="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition-colors duration-200 shadow-md">
+        Reiniciar Mês
+      </button>
+    </div>
+  </div>
+
+  <!-- Registo Diário -->
+  <div class="bg-white p-6 rounded-2xl border border-gray-200 mb-8 shadow-lg">
+    <h2 class="text-2xl font-bold text-gray-800 mb-4">Registo Diário</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+      <div>
+        <label for="entry-date" class="block text-sm font-medium text-gray-700">Data</label>
+        <input type="date" id="entry-date"
+               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring focus:ring-emerald-500 focus:ring-opacity-50 p-2">
+      </div>
+
+      <div>
+        <label for="entry-time" class="block text-sm font-medium text-gray-700">Hora de Entrada (24h)</label>
+        <input type="text" id="entry-time" placeholder="HH:MM" inputmode="numeric" autocomplete="off"
+               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring focus:ring-emerald-500 focus:ring-opacity-50 p-2">
+      </div>
+
+      <div>
+        <label for="lunch-out" class="block text-sm font-medium text-gray-700">Saída p/ Almoço (24h)</label>
+        <input type="text" id="lunch-out" placeholder="HH:MM" inputmode="numeric" autocomplete="off"
+               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring focus:ring-emerald-500 focus:ring-opacity-50 p-2">
+      </div>
+
+      <div>
+        <label for="lunch-in" class="block text-sm font-medium text-gray-700">Volta do Almoço (24h)</label>
+        <input type="text" id="lunch-in" placeholder="HH:MM" inputmode="numeric" autocomplete="off"
+               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring focus:ring-emerald-500 focus:ring-opacity-50 p-2">
+        <p class="text-xs text-gray-500 mt-1">Se for &lt; 1h, conta como 1h. Só conta o excedente acima de 1h.</p>
+      </div>
+
+      <div>
+        <label for="exit-time" class="block text-sm font-medium text-gray-700">Hora de Saída (24h)</label>
+        <input type="text" id="exit-time" placeholder="HH:MM" inputmode="numeric" autocomplete="off"
+               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring focus:ring-emerald-500 focus:ring-opacity-50 p-2">
+      </div>
+    </div>
+
+    <div class="flex items-center mb-4">
+      <input type="checkbox" id="work-from-home" class="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded">
+      <label for="work-from-home" class="ml-2 block text-sm font-medium text-gray-700">Teletrabalho</label>
+    </div>
+
+    <!-- Saída recomendada + UX almoço -->
+    <div id="target-exit-card" class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center mb-4 transition-all duration-300 opacity-0 transform scale-95" style="display:none;">
+      <div class="flex items-center justify-center space-x-2">
+        <i class="fa-solid fa-plane-departure text-emerald-500 text-2xl"></i>
+        <p class="text-gray-700 font-medium text-lg">Saída recomendada:</p>
+      </div>
+
+      <p id="target-exit-time" class="text-2xl font-extrabold text-emerald-600 mt-1"></p>
+
+      <p id="lunch-info" class="text-sm text-gray-600 mt-2"></p>
+    </div>
+
+    <button id="add-entry-button" class="w-full bg-emerald-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-emerald-700 transition-colors duration-200 shadow-md">
+      Adicionar Registo
+    </button>
+
+    <div id="status-message" class="mt-4 text-center font-medium"></div>
+  </div>
+
+  <!-- Histórico -->
+  <div class="mt-8">
+    <h2 class="text-2xl font-bold text-gray-800 mb-4">Histórico de Registos</h2>
+
+    <div class="flex items-center gap-4 mb-4">
+      <label for="month-select" class="text-sm font-medium text-gray-700">Filtrar por Mês:</label>
+      <select id="month-select" class="rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50 p-2"></select>
+
+      <button id="import-button" class="bg-gray-400 text-white font-bold py-2 px-6 rounded-full hover:bg-gray-500 transition-colors duration-200 shadow-md">
+        Importar CSV
+      </button>
+      <input type="file" id="import-file-input" class="hidden" accept=".csv">
+    </div>
+
+    <div class="overflow-x-auto rounded-lg border border-gray-200 scroll-container">
+      <table class="min-w-full bg-white rounded-lg">
+        <thead class="bg-gray-100 sticky top-0">
+          <tr>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Data</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Hora de Entrada</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Saída p/ Almoço</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Volta do Almoço</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Hora de Saída</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Almoço Real</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Almoço Extra</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Trabalhadas</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Saldo Diário</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Saldo Final</th>
+            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="daily-entries-body" class="divide-y divide-gray-200"></tbody>
+      </table>
+    </div>
+
+    <div id="no-entries-message" class="text-center text-gray-500 mt-4 hidden">
+      Nenhum registo para este mês.
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /***********************
+   * CONFIGURAÇÃO CLOUD
+   ***********************/
+  const USE_SHEETS_SYNC = true;
+  const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbxRy1k1LzIhciY-wEqZWymuDmJIOkb0aH1pAslazT9zmUhJsCL2EyEEdIkKDDbO129w/exec';
+
+  /***********************
+   * DOM
+   ***********************/
+  const entryDateInput = document.getElementById('entry-date');
+  const entryTimeInput = document.getElementById('entry-time');
+  const lunchOutInput = document.getElementById('lunch-out');
+  const lunchInInput = document.getElementById('lunch-in');
+  const exitTimeInput = document.getElementById('exit-time');
+
+  const addButton = document.getElementById('add-entry-button');
+  const resetButton = document.getElementById('reset-button');
+  const exportButton = document.getElementById('export-button');
+  const syncButton = document.getElementById('sync-button');
+  const importButton = document.getElementById('import-button');
+  const importFileInput = document.getElementById('import-file-input');
+
+  const monthlyBalanceEl = document.getElementById('monthly-balance');
+  const dailyEntriesBody = document.getElementById('daily-entries-body');
+  const statusMessageEl = document.getElementById('status-message');
+  const noEntriesMessageEl = document.getElementById('no-entries-message');
+
+  const targetExitTimeEl = document.getElementById('target-exit-time');
+  const targetExitCard = document.getElementById('target-exit-card');
+  const lunchInfoEl = document.getElementById('lunch-info');
+
+  const monthSelect = document.getElementById('month-select');
+  const workFromHomeCheckbox = document.getElementById('work-from-home');
+
+  /***********************
+   * CONSTANTES
+   ***********************/
+  const TARGET_MINUTES = 510;      // 8h30
+  const MIN_POSITIVE_BALANCE = 15; // só credita se >= 15 min
+
+  let editingIndex = null;
+
+  /***********************
+   * INIT
+   ***********************/
+  document.addEventListener('DOMContentLoaded', async () => {
+    entryDateInput.valueAsDate = new Date();
+    await loadData();            // carrega cache local
+    populateMonthSelector();
+  });
+
+  /***********************
+   * INPUTS 24H (HH:MM)
+   ***********************/
+  const timeInputs = [entryTimeInput, lunchOutInput, lunchInInput, exitTimeInput];
+
+  timeInputs.forEach(inp => {
+    inp.addEventListener('input', () => {
+      inp.value = normaliseTimeTyping(inp.value);
+      updateTargetExitTime();
+    });
+
+    inp.addEventListener('blur', () => {
+      const mins = parseTimeToMinutes(inp.value);
+      inp.value = (mins === null) ? inp.value.trim() : minutesToHHMM(mins);
+    });
+
+    inp.addEventListener('paste', (event) => {
+      event.preventDefault();
+      const pasted = (event.clipboardData || window.clipboardData).getData('text');
+      inp.value = normaliseTimeTyping(pasted);
+      updateTargetExitTime();
+    });
+  });
+
+  function normaliseTimeTyping(raw) {
+    let v = String(raw || '').trim();
+    v = v.replace(/[^\d:]/g, '');
+
+    const digitsOnly = v.replace(/:/g, '');
+    if (digitsOnly.length >= 3 && !v.includes(':')) {
+      const h = digitsOnly.slice(0, 2);
+      const m = digitsOnly.slice(2, 4);
+      v = `${h}:${m}`;
+    }
+
+    if (v.length > 5) v = v.slice(0, 5);
+    return v;
+  }
+
+  function parseTimeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const s = String(timeStr).trim();
+    const m = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+
+    const hh = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+
+    if (hh < 0 || hh > 23) return null;
+    if (mm < 0 || mm > 59) return null;
+
+    return hh * 60 + mm;
+  }
+
+  function minutesToHHMM(totalMinutes) {
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  }
+
+  function minutesToTime(totalMinutes) {
+    if (totalMinutes === null || totalMinutes === undefined) return '';
+    const sign = totalMinutes >= 0 ? '' : '-';
+    const abs = Math.abs(totalMinutes);
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    return `${sign}${h}h ${m}m`;
+  }
+
+  /***********************
+   * CLOUD (Google Sheets)
+   ***********************/
+  async function sheetsListAll() {
+    if (!USE_SHEETS_SYNC || !SHEETS_API_URL || SHEETS_API_URL.includes('COLOCA_AQUI')) {
+      throw new Error('Configura primeiro o URL do Apps Script.');
+    }
+
+    const url = `${SHEETS_API_URL}?action=list`;
+    const res = await fetch(url);
+    const json = await res.json();
+
+    if (!json.ok) throw new Error(json.error || 'Erro ao listar dados da cloud.');
+    return normaliseCloudEntries(json.data || []);
+  }
+
+  async function sheetsUpsert(entry) {
+    if (!USE_SHEETS_SYNC || !SHEETS_API_URL || SHEETS_API_URL.includes('COLOCA_AQUI')) {
+      return; // se não estiver configurado, falha silenciosamente
+    }
+
+    const payload = { action: 'upsert', entry };
+
+    // sem headers -> evita preflight CORS
+    const res = await fetch(SHEETS_API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Erro ao gravar na cloud.');
+    return true;
+  }
+
+  // Normaliza tipos vindos da folha (strings -> números/boolean)
+  function normaliseCloudEntries(entries) {
+    return (entries || []).map(e => ({
+      date: e.date || null,
+      entry: e.entry || null,
+      lunch_out: e.lunch_out || null,
+      lunch_in: e.lunch_in || null,
+      exit: e.exit || null,
+      work_from_home: e.work_from_home === true || e.work_from_home === 'true' || e.work_from_home === 1 || e.work_from_home === '1',
+      lunch_real: toNullableInt(e.lunch_real),
+      lunch_extra: toNullableInt(e.lunch_extra),
+      worked: toNullableInt(e.worked),
+      daily_balance: toNullableInt(e.daily_balance),
+      final_daily_balance: toNullableInt(e.final_daily_balance)
+    }));
+  }
+
+  function toNullableInt(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  async function syncFromCloud() {
+    try {
+      if (!USE_SHEETS_SYNC) {
+        showMessage('A sincronização cloud está desactivada.', 'text-red-500');
+        return;
+      }
+
+      syncButton.disabled = true;
+      syncButton.textContent = 'A sincronizar...';
+
+      const cloudEntries = await sheetsListAll();
+
+      cloudEntries.sort((a,b) => new Date(a.date) - new Date(b.date));
+      localStorage.setItem('daily_entries', JSON.stringify(cloudEntries));
+
+      populateMonthSelector(); // também chama updateDisplay()
+      showMessage(`Sincronização concluída (${cloudEntries.length} registos).`, 'text-emerald-600');
+    } catch (err) {
+      showMessage(`Falha na sincronização: ${err.message}`, 'text-red-500');
+    } finally {
+      syncButton.disabled = false;
+      syncButton.textContent = 'Sincronizar (Cloud)';
+    }
+  }
+
+  /***********************
+   * LISTENERS
+   ***********************/
+  if (addButton) addButton.addEventListener('click', addOrUpdateEntry);
+
+  if (syncButton) syncButton.addEventListener('click', syncFromCloud);
+
+  if (resetButton) {
+    resetButton.addEventListener('click', () => {
+      if (confirm('Tem a certeza que quer reiniciar o balanço mensal? (Isto limpa apenas a cópia local. Se quiseres também limpar a cloud, tens de apagar os registos na folha.)')) {
+        localStorage.setItem('daily_entries', JSON.stringify([]));
+        updateDisplay();
+        showMessage('Cache local reiniciada com sucesso!', 'text-red-500');
+      }
+    });
+  }
+
+  if (exportButton) exportButton.addEventListener('click', exportToCSV);
+
+  if (importButton) importButton.addEventListener('click', () => importFileInput.click());
+  if (importFileInput) importFileInput.addEventListener('change', importCSV);
+
+  if (dailyEntriesBody) {
+    dailyEntriesBody.addEventListener('click', (event) => {
+      const editButton = event.target.closest('.edit-button');
+      if (editButton) startEdit(editButton.dataset.index);
+    });
+  }
+
+  if (monthSelect) monthSelect.addEventListener('change', updateDisplay);
+
+  /***********************
+   * REGRAS DE ALMOÇO
+   ***********************/
+  function getLunchRealMinutes(lunchOutStr, lunchInStr) {
+    if (!lunchOutStr || !lunchInStr) return null;
+
+    const outMin = parseTimeToMinutes(lunchOutStr);
+    const inMin = parseTimeToMinutes(lunchInStr);
+    if (outMin === null || inMin === null) return null;
+
+    const diff = inMin - outMin;
+    if (diff <= 0) return 'INVALID';
+
+    // Se for < 60 min, conta como 60
+    return Math.max(60, diff);
+  }
+
+  function getLunchExtraMinutes(lunchRealMinutes) {
+    if (lunchRealMinutes === null || lunchRealMinutes === undefined) return 0;
+    return Math.max(0, lunchRealMinutes - 60);
+  }
+
+  function calculateEntryMetrics(entryTime, exitTime, lunchOutStr, lunchInStr) {
+    const entryMin = parseTimeToMinutes(entryTime);
+    const exitMin = parseTimeToMinutes(exitTime);
+
+    if (entryMin === null || exitMin === null) {
+      return { error: 'Preencha a hora de entrada e de saída em HH:MM (24h).' };
+    }
+
+    const workedPresence = exitMin - entryMin;
+    if (workedPresence <= 0) return { error: 'A hora de saída deve ser posterior à hora de entrada.' };
+
+    const lunchReal = getLunchRealMinutes(lunchOutStr, lunchInStr);
+    if (lunchReal === 'INVALID') return { error: 'A volta do almoço tem de ser posterior à saída para almoço.' };
+
+    const lunchExtra = getLunchExtraMinutes(lunchReal);
+
+    // saldo base = presença - 8h30
+    const baseBalance = workedPresence - TARGET_MINUTES;
+
+    // positivos só contam se >= 15 min
+    let creditedBase;
+    if (baseBalance >= 0) {
+      creditedBase = (baseBalance >= MIN_POSITIVE_BALANCE) ? baseBalance : 0;
+    } else {
+      creditedBase = baseBalance;
+    }
+
+    // almoço extra (acima de 1h) desconta sempre
+    const finalDailyBalance = creditedBase - lunchExtra;
+
+    return {
+      worked: workedPresence,
+      lunch_real: lunchReal,
+      lunch_extra: lunchExtra,
+      daily_balance: baseBalance,
+      final_daily_balance: finalDailyBalance
+    };
+  }
+
+  /***********************
+   * UX SAÍDA RECOMENDADA
+   ***********************/
+  function updateTargetExitTime() {
+    if (!targetExitCard || !targetExitTimeEl || !lunchInfoEl) return;
+
+    const entryMin = parseTimeToMinutes(entryTimeInput.value);
+    if (entryMin === null) {
+      targetExitCard.style.display = 'none';
+      targetExitCard.classList.remove('opacity-100', 'scale-100');
+      lunchInfoEl.textContent = '';
+      return;
+    }
+
+    const lunchReal = getLunchRealMinutes(lunchOutInput.value, lunchInInput.value);
+
+    if (lunchReal === 'INVALID') {
+      const targetExitMinutes = entryMin + TARGET_MINUTES;
+      targetExitTimeEl.textContent = minutesToHHMM(targetExitMinutes);
+      lunchInfoEl.textContent = '⚠️ Almoço inválido (volta tem de ser depois da saída).';
+    } else {
+      const lunchExtra = getLunchExtraMinutes(lunchReal);
+      const targetExitMinutes = entryMin + TARGET_MINUTES + lunchExtra;
+      targetExitTimeEl.textContent = minutesToHHMM(targetExitMinutes);
+
+      if (lunchReal === null) {
+        lunchInfoEl.textContent = 'Almoço: (não preenchido) • Extra: 0m';
+      } else {
+        lunchInfoEl.textContent = `Almoço: ${minutesToTime(lunchReal)} • Extra: ${lunchExtra}m`;
+      }
+    }
+
+    targetExitCard.style.display = 'block';
+    setTimeout(() => targetExitCard.classList.add('opacity-100', 'scale-100'), 10);
+  }
+
+  /***********************
+   * CRUD
+   ***********************/
+  async function addOrUpdateEntry() {
+    const entryDate = entryDateInput.value;
+    const entryTime = entryTimeInput.value.trim();
+    const lunchOut = lunchOutInput.value.trim();
+    const lunchIn = lunchInInput.value.trim();
+    const exitTime = exitTimeInput.value.trim();
+    const workFromHome = workFromHomeCheckbox.checked;
+
+    const dailyEntries = JSON.parse(localStorage.getItem('daily_entries')) || [];
+
+    if (!entryDate) {
+      showMessage('Por favor, preencha a data.', 'text-red-500');
+      return;
+    }
+
+    if (!workFromHome && !entryTime && !exitTime) {
+      showMessage('Por favor, preencha a hora de entrada/saída ou marque Teletrabalho.', 'text-red-500');
+      return;
+    }
+
+    const existingEntryIndex = dailyEntries.findIndex(e => e.date === entryDate);
+    let newEntry;
+
+    if (workFromHome) {
+      newEntry = {
+        date: entryDate,
+        entry: null,
+        lunch_out: null,
+        lunch_in: null,
+        exit: null,
+        lunch_real: null,
+        lunch_extra: 0,
+        work_from_home: true,
+        worked: 0,
+        daily_balance: 0,
+        final_daily_balance: 0
+      };
+    } else {
+      // Caso 1: só entrada
+      if (entryTime && !exitTime) {
+        if (existingEntryIndex !== -1 && dailyEntries[existingEntryIndex].exit) {
+          showMessage('Já existe um registo completo para esta data. Por favor, edite-o.', 'text-red-500');
+          return;
+        }
+        if (existingEntryIndex !== -1 && !dailyEntries[existingEntryIndex].exit) {
+          showMessage('Já existe um registo em curso para esta data.', 'text-red-500');
+          return;
+        }
+
+        const lunchReal = getLunchRealMinutes(lunchOut, lunchIn);
+        if (lunchReal === 'INVALID') {
+          showMessage('A volta do almoço tem de ser posterior à saída para almoço.', 'text-red-500');
+          return;
+        }
+
+        newEntry = {
+          date: entryDate,
+          entry: entryTime,
+          lunch_out: lunchOut || null,
+          lunch_in: lunchIn || null,
+          exit: null,
+          lunch_real: (lunchReal === null) ? null : lunchReal,
+          lunch_extra: getLunchExtraMinutes(lunchReal),
+          work_from_home: false,
+          worked: null,
+          daily_balance: null,
+          final_daily_balance: null
+        };
+
+        dailyEntries.push(newEntry);
+        showMessage('Hora de entrada adicionada com sucesso!', 'text-emerald-600');
+      }
+      // Caso 2: só saída (completa registo em curso)
+      else if (!entryTime && exitTime) {
+        if (existingEntryIndex === -1 || !dailyEntries[existingEntryIndex].entry || dailyEntries[existingEntryIndex].work_from_home) {
+          showMessage('Por favor, adicione a hora de entrada primeiro.', 'text-red-500');
+          return;
+        }
+
+        const metrics = calculateEntryMetrics(dailyEntries[existingEntryIndex].entry, exitTime, lunchOut, lunchIn);
+        if (metrics.error) {
+          showMessage(metrics.error, 'text-red-500');
+          return;
+        }
+
+        dailyEntries[existingEntryIndex].exit = exitTime;
+        dailyEntries[existingEntryIndex].lunch_out = lunchOut || null;
+        dailyEntries[existingEntryIndex].lunch_in = lunchIn || null;
+        dailyEntries[existingEntryIndex].lunch_real = metrics.lunch_real;
+        dailyEntries[existingEntryIndex].lunch_extra = metrics.lunch_extra;
+        dailyEntries[existingEntryIndex].worked = metrics.worked;
+        dailyEntries[existingEntryIndex].daily_balance = metrics.daily_balance;
+        dailyEntries[existingEntryIndex].final_daily_balance = metrics.final_daily_balance;
+        dailyEntries[existingEntryIndex].work_from_home = false;
+
+        newEntry = dailyEntries[existingEntryIndex];
+        showMessage('Hora de saída adicionada com sucesso!', 'text-emerald-600');
+      }
+      // Caso 3: registo completo
+      else {
+        const metrics = calculateEntryMetrics(entryTime, exitTime, lunchOut, lunchIn);
+        if (metrics.error) {
+          showMessage(metrics.error, 'text-red-500');
+          return;
+        }
+
+        newEntry = {
+          date: entryDate,
+          entry: entryTime,
+          lunch_out: lunchOut || null,
+          lunch_in: lunchIn || null,
+          exit: exitTime,
+          lunch_real: metrics.lunch_real,
+          lunch_extra: metrics.lunch_extra,
+          work_from_home: false,
+          worked: metrics.worked,
+          daily_balance: metrics.daily_balance,
+          final_daily_balance: metrics.final_daily_balance
+        };
+      }
+    }
+
+    // Guardar local + (opcional) cloud para registos completos / edição / teletrabalho
+    if (workFromHome || (entryTime && exitTime)) {
+      if (editingIndex !== null) {
+        dailyEntries[editingIndex] = newEntry;
+        showMessage('Registo editado com sucesso!', 'text-emerald-600');
+        editingIndex = null;
+        addButton.textContent = 'Adicionar Registo';
+      } else {
+        if (existingEntryIndex !== -1) {
+          dailyEntries[existingEntryIndex] = newEntry;
+          showMessage('Registo atualizado com sucesso!', 'text-emerald-600');
+        } else {
+          dailyEntries.push(newEntry);
+          showMessage('Registo adicionado com sucesso!', 'text-emerald-600');
+        }
+      }
+    }
+
+    dailyEntries.sort((a,b) => new Date(a.date) - new Date(b.date));
+    localStorage.setItem('daily_entries', JSON.stringify(dailyEntries));
+
+    // Cloud sync automático (gravação)
+    try {
+      if (USE_SHEETS_SYNC && (workFromHome || (entryTime && exitTime))) {
+        await sheetsUpsert(newEntry);
+      }
+    } catch (err) {
+      showMessage(`Gravei localmente, mas falhou a cloud: ${err.message}`, 'text-red-500');
+    }
+
+    // Limpar
+    entryTimeInput.value = '';
+    lunchOutInput.value = '';
+    lunchInInput.value = '';
+    exitTimeInput.value = '';
+    workFromHomeCheckbox.checked = false;
+    if (targetExitCard) targetExitCard.style.display = 'none';
+    lunchInfoEl.textContent = '';
+
+    updateDisplay();
+    populateMonthSelector();
+  }
+
+  function startEdit(index) {
+    const dailyEntries = JSON.parse(localStorage.getItem('daily_entries')) || [];
+    const entryToEdit = dailyEntries[index];
+
+    entryDateInput.value = entryToEdit.date;
+    entryTimeInput.value = entryToEdit.entry || '';
+    lunchOutInput.value = entryToEdit.lunch_out || '';
+    lunchInInput.value = entryToEdit.lunch_in || '';
+    exitTimeInput.value = entryToEdit.exit || '';
+    workFromHomeCheckbox.checked = !!entryToEdit.work_from_home;
+
+    editingIndex = Number(index);
+    addButton.textContent = 'Guardar Edição';
+    showMessage('Pode editar o registo e clicar em "Guardar Edição".', 'text-red-500');
+
+    updateTargetExitTime();
+  }
+
+  /***********************
+   * DISPLAY
+   ***********************/
+  async function loadData() {
+    // Arranca com cache local (rápido); a cloud vem por botão manual
+    const dailyEntries = JSON.parse(localStorage.getItem('daily_entries')) || [];
+    renderDailyEntries(dailyEntries);
+    updateMonthlyBalance();
+  }
+
+  function updateMonthlyBalance() {
+    if (!monthlyBalanceEl || !monthSelect) return;
+
+    const selectedMonth = monthSelect.value;
+    const dailyEntries = JSON.parse(localStorage.getItem('daily_entries')) || [];
+
+    let monthlyBalance = 0;
+
+    dailyEntries
+      .filter(e => e.date && new Date(e.date).toISOString().substring(0,7) === selectedMonth)
+      .forEach(e => {
+        if (e.final_daily_balance !== null && e.final_daily_balance !== undefined) {
+          monthlyBalance += e.final_daily_balance;
+        }
+      });
+
+    monthlyBalanceEl.textContent = minutesToTime(monthlyBalance);
+    if (monthlyBalance >= 0) {
+      monthlyBalanceEl.classList.remove('text-red-600');
+      monthlyBalanceEl.classList.add('text-emerald-600');
+    } else {
+      monthlyBalanceEl.classList.remove('text-emerald-600');
+      monthlyBalanceEl.classList.add('text-red-600');
+    }
+  }
+
+  function updateDisplay() {
+    updateMonthlyBalance();
+    const dailyEntries = JSON.parse(localStorage.getItem('daily_entries')) || [];
+    renderDailyEntries(dailyEntries);
+  }
+
+  function renderDailyEntries(allEntries) {
+    if (!dailyEntriesBody || !noEntriesMessageEl || !monthSelect) return;
+    dailyEntriesBody.innerHTML = '';
+
+    const selectedMonth = monthSelect.value;
+    const entries = allEntries.filter(e => e.date && new Date(e.date).toISOString().substring(0,7) === selectedMonth);
+
+    if (entries.length === 0) {
+      noEntriesMessageEl.classList.remove('hidden');
+      return;
+    }
+    noEntriesMessageEl.classList.add('hidden');
+
+    entries.forEach((entry, index) => {
+      const row = document.createElement('tr');
+      row.classList.add('hover:bg-gray-50');
+
+      const createCell = (text, isPositive) => {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        cell.classList.add('py-3','px-4','text-sm','text-gray-700','whitespace-nowrap');
+        if (isPositive !== undefined) {
+          cell.classList.add(isPositive ? 'text-emerald-600' : 'text-red-600');
+          cell.classList.add('font-medium');
+        }
+        return cell;
+      };
+
+      const formattedDate = new Date(entry.date + 'T00:00:00').toLocaleDateString('pt-PT');
+
+      const lunchRealText = (entry.lunch_real === null || entry.lunch_real === undefined)
+        ? ''
+        : minutesToTime(entry.lunch_real);
+
+      const lunchExtraText = minutesToTime(entry.lunch_extra ?? 0);
+
+      row.appendChild(createCell(formattedDate));
+      row.appendChild(createCell(entry.entry || (entry.work_from_home ? 'Teletrabalho' : '...')));
+      row.appendChild(createCell(entry.lunch_out || ''));
+      row.appendChild(createCell(entry.lunch_in || ''));
+      row.appendChild(createCell(entry.exit || (entry.work_from_home ? 'Teletrabalho' : '...')));
+
+      row.appendChild(createCell(entry.work_from_home ? '' : lunchRealText));
+      row.appendChild(createCell(entry.work_from_home ? '0h 0m' : lunchExtraText));
+      row.appendChild(createCell(entry.work_from_home ? '8h 30m' : (minutesToTime(entry.worked) || '...')));
+
+      row.appendChild(createCell(
+        entry.work_from_home ? '0h 0m' : (minutesToTime(entry.daily_balance) || '...'),
+        entry.work_from_home ? true : ((entry.daily_balance ?? 0) >= 0)
+      ));
+
+      row.appendChild(createCell(
+        entry.work_from_home ? '0h 0m' : (minutesToTime(entry.final_daily_balance) || '...'),
+        entry.work_from_home ? true : ((entry.final_daily_balance ?? 0) >= 0)
+      ));
+
+      const actionsCell = document.createElement('td');
+      actionsCell.classList.add('py-3','px-4','text-sm','text-gray-700','whitespace-nowrap');
+      actionsCell.innerHTML = `<button class="edit-button text-red-500 hover:text-red-700 transition-colors duration-200" data-index="${index}">
+        <i class="fa-solid fa-pen-to-square"></i>
+      </button>`;
+      row.appendChild(actionsCell);
+
+      dailyEntriesBody.appendChild(row);
+    });
+  }
+
+  function showMessage(message, colorClass) {
+    if (!statusMessageEl) return;
+    statusMessageEl.textContent = message;
+    statusMessageEl.classList.remove('text-green-500','text-red-500','text-blue-500');
+    statusMessageEl.classList.add(colorClass);
+    setTimeout(() => statusMessageEl.textContent = '', 3500);
+  }
+
+  function populateMonthSelector() {
+    if (!monthSelect) return;
+    const dailyEntries = JSON.parse(localStorage.getItem('daily_entries')) || [];
+
+    const availableMonths = [...new Set(
+      dailyEntries.map(e => e.date ? new Date(e.date).toISOString().substring(0,7) : null)
+    )].filter(Boolean);
+
+    monthSelect.innerHTML = '';
+
+    availableMonths.sort().forEach(month => {
+      const option = document.createElement('option');
+      option.value = month;
+      const date = new Date(month + '-01');
+      const label = date.toLocaleString('pt-PT', { month: 'long', year: 'numeric' });
+      option.textContent = label.charAt(0).toUpperCase() + label.slice(1);
+      monthSelect.appendChild(option);
+    });
+
+    const todayMonth = new Date().toISOString().substring(0,7);
+    if (availableMonths.includes(todayMonth)) {
+      monthSelect.value = todayMonth;
+    } else if (availableMonths.length > 0) {
+      monthSelect.value = availableMonths[availableMonths.length - 1];
+    } else {
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth()+1).padStart(2,'0');
+      const current = `${y}-${m}`;
+      const option = document.createElement('option');
+      option.value = current;
+      const label = today.toLocaleString('pt-PT', { month: 'long', year: 'numeric' });
+      option.textContent = label.charAt(0).toUpperCase() + label.slice(1);
+      monthSelect.appendChild(option);
+    }
+
+    updateDisplay();
+  }
+
+  /***********************
+   * CSV
+   ***********************/
+  function exportToCSV() {
+    const dailyEntries = JSON.parse(localStorage.getItem('daily_entries')) || [];
+    if (dailyEntries.length === 0) {
+      showMessage('Não há dados para exportar.', 'text-red-500');
+      return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    const headers = [
+      "Data","Entrada","Saida Almoco","Volta Almoco","Saida",
+      "Almoco Real (min)","Almoco Extra (min)",
+      "Trabalhadas (min)","Saldo Diario (min)","Saldo Final (min)"
+    ];
+    csvContent += headers.join(";") + "\n";
+
+    dailyEntries.forEach(e => {
+      const row = [
+        new Date(e.date + 'T00:00:00').toLocaleDateString('pt-PT'),
+        e.entry || (e.work_from_home ? 'Teletrabalho' : ''),
+        e.lunch_out || '',
+        e.lunch_in || '',
+        e.exit || (e.work_from_home ? 'Teletrabalho' : ''),
+        (e.lunch_real ?? ''),
+        (e.lunch_extra ?? 0),
+        (e.worked ?? ''),
+        (e.daily_balance ?? ''),
+        (e.final_daily_balance ?? '')
+      ];
+      csvContent += row.join(";") + "\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `registos_horas_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showMessage('Dados exportados com sucesso!', 'text-emerald-600');
+  }
+
+  function importCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n');
+      lines.shift();
+
+      const imported = [];
+
+      lines.forEach(line => {
+        if (!line.trim()) return;
+        const parts = line.split(';').map(p => p.trim());
+        if (parts.length < 6) return;
+
+        let dateStr, entry, lunchOut, lunchIn, exit;
+        let lunchRealStr = '', lunchExtraStr = '';
+        let worked, daily_balance, final_daily_balance;
+
+        if (parts.length >= 10) {
+          [dateStr, entry, lunchOut, lunchIn, exit, lunchRealStr, lunchExtraStr, worked, daily_balance, final_daily_balance] = parts;
+        } else if (parts.length === 8) {
+          let exitOld;
+          [dateStr, entry, exitOld, lunchRealStr, lunchExtraStr, worked, daily_balance, final_daily_balance] = parts;
+          lunchOut = '';
+          lunchIn = '';
+          exit = exitOld;
+        } else {
+          let exitOld;
+          [dateStr, entry, exitOld, worked, daily_balance, final_daily_balance] = parts;
+          lunchOut = '';
+          lunchIn = '';
+          exit = exitOld;
+        }
+
+        const [day, month, year] = dateStr.split('/');
+        const formattedDate = `${year}-${month}-${day}`;
+        const isWFH = entry === 'Teletrabalho' || exit === 'Teletrabalho';
+
+        const lunchRealParsed = lunchRealStr === '' ? null : (parseInt(lunchRealStr,10) || null);
+        const lunchReal = (isWFH || lunchRealParsed === null) ? null : Math.max(60, lunchRealParsed);
+        const computedExtra = (lunchReal === null) ? 0 : Math.max(0, lunchReal - 60);
+
+        const extraParsed = parseInt(lunchExtraStr,10);
+        const lunchExtra = isWFH ? 0 : (Number.isFinite(extraParsed) ? extraParsed : computedExtra);
+
+        imported.push({
+          date: formattedDate,
+          entry: isWFH ? null : (entry || null),
+          lunch_out: isWFH ? null : (lunchOut || null),
+          lunch_in: isWFH ? null : (lunchIn || null),
+          exit: isWFH ? null : (exit || null),
+          lunch_real: isWFH ? null : lunchReal,
+          lunch_extra: lunchExtra,
+          work_from_home: isWFH,
+          worked: isWFH ? 0 : (parseInt(worked,10) || null),
+          daily_balance: isWFH ? 0 : (parseInt(daily_balance,10) || null),
+          final_daily_balance: isWFH ? 0 : (parseInt(final_daily_balance,10) || null),
+        });
+      });
+
+      if (imported.length > 0) {
+        imported.sort((a,b) => new Date(a.date) - new Date(b.date));
+        localStorage.setItem('daily_entries', JSON.stringify(imported));
+        updateDisplay();
+        populateMonthSelector();
+        showMessage('Dados importados com sucesso!', 'text-emerald-600');
+      } else {
+        showMessage('O ficheiro CSV não contém dados válidos.', 'text-red-500');
+      }
+    };
+
+    reader.readAsText(file);
+  }
+</script>
+
+</body>
+</html>
